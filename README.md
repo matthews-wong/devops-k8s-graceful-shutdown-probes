@@ -14,3 +14,20 @@ termination grace period that actually covers both.
 ## Validate
 
     make validate
+
+## Shutdown timeline
+
+1. The pod is marked terminating and removed from Service endpoints.
+2. `preStop` sleeps 10s: kube-proxy and ingress controllers learn about the
+   removal while nginx keeps answering.
+3. `nginx -s quit` stops accepting connections and finishes in-flight ones.
+4. If the container is still alive at `terminationGracePeriodSeconds` (45s),
+   it gets SIGKILL.
+
+`maxUnavailable: 0` with `maxSurge: 1` means a new pod must pass its
+readiness probe before an old one is taken down.
+
+`scripts/check-shutdown.py` fails when the grace period is shorter than the
+`preStop` sleep plus a 20s drain allowance, or when a container lacks a
+startup, readiness or liveness probe. Validated locally with kubeconform
+0.6.7 against Kubernetes 1.31.0; it was not applied to a live cluster.
